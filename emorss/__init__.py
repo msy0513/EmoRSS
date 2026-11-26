@@ -1,1 +1,1 @@
-"""Main-table evaluation for EmoRSS."""
+"""EmoRSS steering and evaluation."""

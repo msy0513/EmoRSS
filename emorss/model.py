@@ -20,10 +20,8 @@ def load_model(checkpoint, revision, device, attention=None):
     return model.eval(), tokenizer
 
 
-def encode(tokenizer, prompt, backbone, system=None):
+def encode(tokenizer, prompt, backbone):
     messages = [{"role": "user", "content": prompt}]
-    if system is not None:
-        messages.insert(0, {"role": "system", "content": system})
     options = {"enable_thinking": False} if backbone == "qwen" else {}
     return tokenizer.apply_chat_template(
         messages, tokenize=True, add_generation_prompt=True, return_dict=False, **options,
@@ -97,48 +95,3 @@ def edit_prefill(model, layer, direction, strength):
         yield
     finally:
         handle.remove()
-
-
-@contextmanager
-def ablate_direction(model, direction, *, sublayers=False):
-    def project(hidden):
-        vector = direction.to(hidden)
-        return hidden - (hidden @ vector).unsqueeze(-1) * vector
-
-    def output_hook(_module, _inputs, output):
-        return map_hidden(output, project)
-
-    def block_input(_module, inputs):
-        return (project(inputs[0]), *inputs[1:])
-
-    handles = []
-    try:
-        if sublayers:
-            for layer in model.model.layers:
-                handles.append(layer.register_forward_pre_hook(block_input))
-                handles.append(layer.self_attn.register_forward_hook(output_hook))
-                handles.append(layer.mlp.register_forward_hook(output_hook))
-        else:
-            for module in [model.model.embed_tokens, *model.model.layers]:
-                handles.append(module.register_forward_hook(output_hook))
-        yield
-    finally:
-        for handle in handles:
-            handle.remove()
-
-
-@contextmanager
-def add_layer_vectors(model, vectors):
-    def add(vector):
-        def hook(_module, _inputs, output):
-            return map_hidden(output, lambda hidden: hidden + vector.to(hidden))
-        return hook
-
-    handles = []
-    try:
-        for layer, vector in vectors.items():
-            handles.append(model.model.layers[layer].register_forward_hook(add(vector)))
-        yield
-    finally:
-        for handle in handles:
-            handle.remove()

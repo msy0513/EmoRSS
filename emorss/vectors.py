@@ -18,20 +18,6 @@ def steering_vectors(path, backbone):
     raise ValueError("EmoRSS expects a signed .npy vector or the model's archived vector file")
 
 
-def sva_vector(path):
-    if path.suffix == ".npy":
-        return np.load(path, allow_pickle=False)
-    if path.suffix == ".pt":
-        import torch
-
-        value = torch.load(path, map_location="cpu", weights_only=True)
-        if isinstance(value, (list, tuple)) and len(value) == 1:
-            value = value[0]
-        if isinstance(value, torch.Tensor):
-            return value.squeeze().float().numpy()
-    raise ValueError("SVA expects one direction in .npy or direction_ablation.pt")
-
-
 def decode_shift(regular, emotional, decoder, direction, scale):
     """Estimate the signed reverse edit from paired discovery SAE codes."""
     if regular.ndim != 2 or emotional.shape != regular.shape or regular.shape[0] == 0:
@@ -51,11 +37,13 @@ def decode_shift(regular, emotional, decoder, direction, scale):
         raise ValueError("The decoder must contain at least 32 nonzero features")
     # The norm of the refusal direction is common to all cosine scores.
     alignment = np.divide(
-        np.abs(direction @ decoder), norms, out=np.full_like(norms, -np.inf), where=norms > 0,
+        np.abs(np.einsum("i,ij->j", direction, decoder)),
+        norms, out=np.full_like(norms, -np.inf), where=norms > 0,
     )
     selected = np.argsort(-alignment, kind="stable")[:32]
     change = (emotional[:, selected].astype(np.float64) - regular[:, selected]).mean(axis=0)
-    return (-scale * (decoder[:, selected] @ change)).astype(np.float32)
+    decoded = np.einsum("ij,j->i", decoder[:, selected], change)
+    return (-scale * decoded).astype(np.float32)
 
 
 def fit_vector(args):
