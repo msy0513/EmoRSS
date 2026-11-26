@@ -26,7 +26,13 @@ def main():
     add_run_options(generate)
     generate.add_argument("--checkpoint", help="Model ID or local snapshot directory")
     generate.add_argument("--revision", help="Checkpoint revision override")
-    generate.add_argument("--vector", type=Path, required=True, help="Signed EmoRSS steering vector artifact")
+    steering = generate.add_mutually_exclusive_group(required=True)
+    steering.add_argument("--vector", type=Path, help="Shared signed .npy vector or archived Qwen JSON")
+    steering.add_argument(
+        "--archived-risk-vectors",
+        type=Path,
+        help="Llama archive with offsets selected by the validation risk label",
+    )
     generate.add_argument("--batch-size", type=positive_int, default=8)
     generate.add_argument("--max-new-tokens", type=positive_int, default=512)
 
@@ -42,6 +48,8 @@ def main():
     fit.add_argument("--out", type=Path, required=True, help="Signed reverse edit in NumPy .npy format")
 
     args = parser.parse_args()
+    if args.command == "generate" and args.archived_risk_vectors and args.model != "llama":
+        generate.error("--archived-risk-vectors is available for the Llama archive")
     try:
         if args.command == "generate":
             from .generate import generate as run

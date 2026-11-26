@@ -6,10 +6,13 @@ import torch
 def load_model(checkpoint, revision, device, attention=None):
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    on_cuda = torch.device(device).type == "cuda"
+    if on_cuda and not torch.cuda.is_available():
+        raise ValueError("CUDA is unavailable. Use --device cpu for a small local checkpoint.")
+
     tokenizer = AutoTokenizer.from_pretrained(checkpoint, revision=revision, padding_side="left")
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
-    on_cuda = torch.device(device).type == "cuda"
     dtype = torch.bfloat16 if on_cuda else torch.float32
     model = AutoModelForCausalLM.from_pretrained(
         checkpoint, revision=revision, dtype=dtype, device_map={"": device} if on_cuda else None,

@@ -3,19 +3,31 @@ import json
 import numpy as np
 
 
-def steering_vectors(path, backbone):
-    """Read the signed pre-strength edit from a release or archive artifact."""
+def validate_vector(value):
+    vector = np.asarray(value)
+    if vector.ndim != 1 or not vector.size or vector.dtype.kind not in "fiu" or not np.isfinite(vector).all():
+        raise ValueError("Expected a nonempty, finite one-dimensional steering vector")
+    return vector
+
+
+def load_shared_vector(path, backbone):
+    """Read one signed edit for all evaluation prompts."""
     if path.suffix == ".npy":
-        delta = np.load(path, allow_pickle=False)
-        return {"low": delta, "high": delta}
-    if path.suffix == ".npz" and backbone == "llama":
-        with np.load(path, allow_pickle=False) as archive:
-            return {risk: archive[f"{risk}__k32_restore"] for risk in ("low", "high")}
+        return validate_vector(np.load(path, allow_pickle=False))
     if path.suffix == ".json" and backbone == "qwen":
         with path.open(encoding="utf-8") as handle:
-            delta = np.asarray(json.load(handle)["seed17"]["v_cancel"])
-        return {"low": delta, "high": delta}
-    raise ValueError("EmoRSS expects a signed .npy vector or the model's archived vector file")
+            return validate_vector(json.load(handle)["seed17"]["v_cancel"])
+    if path.suffix == ".npz" and backbone == "llama":
+        raise ValueError("Use --archived-risk-vectors to replay the Llama archive")
+    raise ValueError("Provide a signed .npy vector or the archived Qwen vector JSON")
+
+
+def load_archived_risk_vectors(path):
+    """Read the two label-conditioned offsets from the Llama archive."""
+    if path.suffix != ".npz":
+        raise ValueError("The archived risk vectors must be provided as a .npz file")
+    with np.load(path, allow_pickle=False) as archive:
+        return {risk: validate_vector(archive[f"{risk}__k32_restore"]) for risk in ("low", "high")}
 
 
 def decode_shift(regular, emotional, decoder, direction, scale):
@@ -47,13 +59,13 @@ def decode_shift(regular, emotional, decoder, direction, scale):
 
 
 def fit_vector(args):
+    if args.out.suffix != ".npy":
+        raise ValueError("The fitted vector output must end in .npy")
     with np.load(args.codes, allow_pickle=False) as inputs:
         delta = decode_shift(
             inputs["regular_codes"], inputs["emotional_codes"], inputs["decoder"],
             inputs["refusal_direction"], float(inputs["activation_scale"].item()),
         )
-    if args.out.suffix != ".npy":
-        raise ValueError("The fitted vector output must end in .npy")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     np.save(args.out, delta, allow_pickle=False)
     print(f"Wrote signed reverse edit to {args.out}")

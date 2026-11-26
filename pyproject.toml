@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "emorss"
+version = "0.1.0"
+description = "Refusal subspace steering for emotion-induced over-refusal"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+dynamic = ["dependencies"]
+
+[project.urls]
+Paper = "https://arxiv.org/pdf/2610.04998"
+Repository = "https://github.com/msy0513/EmoRSS"
+
+[project.scripts]
+emorss = "emorss.__main__:main"
+
+[tool.setuptools]
+packages = ["emorss"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
